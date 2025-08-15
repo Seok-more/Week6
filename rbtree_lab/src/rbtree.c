@@ -259,6 +259,10 @@ node_t* rbtree_insert(rbtree* tree, const key_t key)
     node->right = tree->nil;
     node->parent = tree->nil;
 
+    // 삽입 위치를 찾기위함
+    //              [y]
+    //            /
+    //  [x(node)]
     node_t* y = tree->nil;
     node_t* x = tree->root;
 
@@ -276,6 +280,7 @@ node_t* rbtree_insert(rbtree* tree, const key_t key)
     }
 
     node->parent = y;
+
     if (y == tree->nil)
     {
         tree->root = node;
@@ -358,8 +363,8 @@ node_t* rbtree_max(const rbtree* tree)
 }
 
 /*
- * 삭제 대체 노드(후속 노드) 찾기
- * 오른쪽 서브트리의 최소값 또는 부모로 올라가서 최초로 왼쪽 자식이 아닌 부모를 찾음
+ * 삭제 대체 노드(석섹서) 찾기
+ * 오른쪽 서브트리의 최소값 or 부모로 올라가서 최초로 왼쪽 자식이 아닌 부모를 찾음
  */
 static node_t* tree_successor(const rbtree* tree, node_t* node)
 {
@@ -392,91 +397,191 @@ static node_t* tree_successor(const rbtree* tree, node_t* node)
 
 /*
  * 삭제 후 트리 규칙 복구
- * Case 1~6: 형제, 조부모, 자식의 색과 구조에 따라
- * 색상 변경 및 회전 반복
+ * Case 1) 삭제할 노드가 red : 걍 삭제함
+ * Case 2) Root가 DB : 추가 black 삭제
+ * Case 3) DB의 형제가 red : s=black, p=red (s와 p 색상교환) + DB방향으로 Rotate(p) => 다른 Case로 전환
+ * Case 4) DB의 형제가 black && 형제의 양쪽 자식 모두 black : DB를 parent에게 이전, (p = !p_color), s=red => 아직 DB가 있다면 p를 대상으로 알고리즘 실행
+ * Case 5) DB의 형제가 black && 형제의 near자식=red, 형제의 far자식=black : near=black, s=red(s와 near의 색상교환) + far방향으로 Rotate(s) => Case 6
+ * Case 6) DB의 형제가 black && 형제의 far자식=red => far=black, (p와 s의 색상교환) + DB방향으로 Rotate(p) => 추가 black 삭제
  */
 static void erase_fixup(rbtree* tree, node_t* x)
 {
+    // Case 2) 루트가 DB면, 루프 조건에서 바로 종료되어 x->color만 black으로 변경됨
+
     while (x != tree->root && x->color == RBTREE_BLACK)
     {
+        // 삭제하려는 것이 왼쪽 자식일때
         if (x == x->parent->left)
         {
-            node_t* w = x->parent->right;
-            if (w->color == RBTREE_RED)
-            { // Case 3
-                w->color = RBTREE_BLACK;
+            // s = sibling
+            node_t* s = x->parent->right;
+
+            // Case 3) s가 red이면 색상 교환 후 p 기준으로 좌회전
+            if (s->color == RBTREE_RED)
+            { 
+                //            [p(B)]
+                //     [x(DB)]      [s(R)]
+                //               [sl]     [sr]
+                //   
+                //            [s(B)]
+                //       [p(R)]     [sr]
+                //  [x(DB)]   [sl*]
+
+                s->color = RBTREE_BLACK;
                 x->parent->color = RBTREE_RED;
                 left_rotate(tree, x->parent);
-                w = x->parent->right;
+                s = x->parent->right; // *바뀐 형제 갱신
             }
-            if (w->left->color == RBTREE_BLACK && w->right->color == RBTREE_BLACK)
-            { // Case 4
-                w->color = RBTREE_RED;
+        
+            // Case 4) s와 s의 자식 둘 다 black이면 s를 red로, x의 DB를 부모로 올림
+            if (s->left->color == RBTREE_BLACK && s->right->color == RBTREE_BLACK)
+            { 
+                //             [p]
+                //     [x(DB)]      [s(B)]
+                //             [sl(B)]   [sr(B)]
+                //
+                //            [p(DB)]
+                //      [x(B)]        [s(R)]
+                //               [sl(B)]   [sr(B)]
+                
+                s->color = RBTREE_RED;
                 x = x->parent;
             }
-            else {
-                if (w->right->color == RBTREE_BLACK)
-                { // Case 5
-                    w->left->color = RBTREE_BLACK;
-                    w->color = RBTREE_RED;
-                    right_rotate(tree, w);
-                    w = x->parent->right;
+            else 
+            {
+                // Case 5) s=black, sr=black, sl=red면 색상 교환 후 s 기준으로 우회전 -> Case 6로
+                if (s->right->color == RBTREE_BLACK)
+                { 
+                    //             [p]
+                    //     [x(DB)]      [s(B)]
+                    //             [sl(R)]   [sr(B)]
+                    //
+                    //             [p]
+                    //     [x(DB)]      [sl(B)*] 
+                    //                       [s(R)]
+                    //                           [sr(B)]
+                    //
+                    s->left->color = RBTREE_BLACK;
+                    s->color = RBTREE_RED;
+                    right_rotate(tree, s);
+                    s = x->parent->right; // *바뀐 형제 갱신
                 }
-                // Case 6
-                w->color = x->parent->color;
+               
+                // Case 6) s=black, sr=red면 p 기준으로 좌회전, DB 제거
+                
+                //            [p]
+                //     [x(DB)]    [s(B)]
+                //                     [sr(R)]
+                //
+                //              [s(R)]
+                //        [p(B)]       [sr(B)]
+                //    [x(B)]
+                
+                s->color = x->parent->color;
                 x->parent->color = RBTREE_BLACK;
-                w->right->color = RBTREE_BLACK;
+                s->right->color = RBTREE_BLACK;
                 left_rotate(tree, x->parent);
-                x = tree->root;
+                x = tree->root; // DB 루트로 보내서 제거
             }
         }
-        else
+        else // 오른쪽 자식일때,
         {
-            node_t* w = x->parent->left;
-            if (w->color == RBTREE_RED)
-            { // Case 3(대칭)
-                w->color = RBTREE_BLACK;
+            node_t* s = x->parent->left;
+
+            // Case 3) s가 red이면 색상 교환 후 p 기준으로 우회전
+            if (s->color == RBTREE_RED)
+            {
+                //            [p(B)]
+                //      [s(R)]        [x(DB)]
+                //   [sl]   [sr]
+                //
+                //            [s(B)]
+                //       [sl]       [p(R)]
+                //               [sr*]   [x(DB)]
+
+                s->color = RBTREE_BLACK;
                 x->parent->color = RBTREE_RED;
                 right_rotate(tree, x->parent);
-                w = x->parent->left;
+                s = x->parent->left; // *바뀐 형제 갱신
             }
-            if (w->right->color == RBTREE_BLACK && w->left->color == RBTREE_BLACK)
-            { // Case 4(대칭)
-                w->color = RBTREE_RED;
+
+            // Case 4) s와 s의 자식 둘 다 black이면 s를 red로, x의 DB를 부모로 올림
+            if (s->right->color == RBTREE_BLACK && s->left->color == RBTREE_BLACK)
+            {
+                //                [p]
+                //        [s(B)]        [x(DB)]
+                //   [sl(B)]   [sr(B)]
+                //
+                //              [p(DB)]
+                //         [s(R)]        [x(B)]
+                //   [sl(B)]   [sr(B)]
+
+                s->color = RBTREE_RED;
                 x = x->parent;
             }
             else
             {
-                if (w->left->color == RBTREE_BLACK)
-                { // Case 5(대칭)
-                    w->right->color = RBTREE_BLACK;
-                    w->color = RBTREE_RED;
-                    left_rotate(tree, w);
-                    w = x->parent->left;
+                // Case 5) s=black, sl=black, sr=red면 색상 교환 후 s 기준으로 좌회전 -> Case 6로
+                if (s->left->color == RBTREE_BLACK)
+                {
+                    //                  [p]
+                    //         [s(B)]        [x(DB)]
+                    //   [sl(B)]   [sr(R)]
+                    //
+                    //                  [p]
+                    //         [sr(B)*]      [x(DB)]
+                    //     [s(R)]   [sl(B)]
+                    //
+                    s->right->color = RBTREE_BLACK;
+                    s->color = RBTREE_RED;
+                    left_rotate(tree, s);
+                    s = x->parent->left; // *바뀐 형제 갱신
                 }
-                // Case 6(대칭)
-                w->color = x->parent->color;
+
+                // Case 6) s=black, sl=red면 p 기준으로 우회전, DB 제거
+
+                //                [p]
+                //        [s(B)]        [x(DB)]
+                //   [sl(R)]   
+                //
+                //             [s(R)]
+                //      [sl(B)]      [p(B)]
+                //                       [x(B)]
+
+                s->color = x->parent->color;
                 x->parent->color = RBTREE_BLACK;
-                w->left->color = RBTREE_BLACK;
+                s->left->color = RBTREE_BLACK;
                 right_rotate(tree, x->parent);
-                x = tree->root;
+                x = tree->root; // DB 루트로 보내서 제거
             }
         }
     }
+
+    // Case 1) 삭제할 노드가 red : 걍 삭제함 (x가 red면 fixup 호출 자체를 안함)
     x->color = RBTREE_BLACK;
 }
 
+
 /*
- * 트리에서 노드 삭제
- * 자식이 하나 또는 둘일 때 각각 대체 노드(x)로 교체
- * y의 색이 BLACK이면 erase_fixup으로 트리 규칙 복구
+ * 1. 삭제 대상 노드(node)가 자식이 0개 또는 1개면 node가 직접 삭제됨.
+ *    -> 자식이 2개면 석세서(y)를 찾아 node의 key값만 교체하고 y를 삭제.
+ * 2. 삭제를 위해 y의 자식(x)와 부모 연결을 갱신.
+ * 3. 실제 삭제는 항상 자식이 0개 또는 1개인 노드(y)에서 발생
  */
 int rbtree_erase(rbtree* tree, node_t* node)
 {
+    if (!tree || node == tree->nil) return 0;
+
+    // y: 실제로 삭제될 노드
     node_t* y = (node->left == tree->nil || node->right == tree->nil) ? node : tree_successor(tree, node);
+
+    // x: y의 자식
     node_t* x = (y->left != tree->nil) ? y->left : y->right;
 
+    // x의 부모를 y의 부모로 연결
     x->parent = y->parent;
+
+    // 트리의 root가 삭제되는 경우 root를 x로 교체
     if (y->parent == tree->nil)
     {
         tree->root = x;
@@ -490,18 +595,17 @@ int rbtree_erase(rbtree* tree, node_t* node)
         y->parent->right = x;
     }
 
-
+    // 삭제 대상이 석세서(y)라면 node의 key값만 y의 key로 복사
     if (y != node)
     {
         node->key = y->key;
     }
 
-
+    // 삭제된 노드가 BLACK면 재조정
     if (y->color == RBTREE_BLACK)
     {
         erase_fixup(tree, x);
     }
-
 
     free(y);
     return 0;
@@ -553,40 +657,40 @@ void print_rbtree(const rbtree* tree) {
     print_rbtree_rec(tree, tree->root, 0, '|');
 }
 
-  //int main(void)
-  //{
-  //    rbtree* tree = new_rbtree();
+//   int main(void)
+//   {
+//       rbtree* tree = new_rbtree();
 
-  //    // 삽입 테스트
-  //    rbtree_insert(tree, 30);
-  //    print_rbtree(tree);
+//       // 삽입 테스트
+//       rbtree_insert(tree, 30);
+//       print_rbtree(tree);
 
-  //    rbtree_insert(tree, 10);
-  //    print_rbtree(tree);
+//       rbtree_insert(tree, 10);
+//       print_rbtree(tree);
 
-  //    rbtree_insert(tree, 20);
-  //    print_rbtree(tree);
+//       rbtree_insert(tree, 20);
+//       print_rbtree(tree);
 
-  //    rbtree_insert(tree, 25);
-  //    print_rbtree(tree);
+//       rbtree_insert(tree, 25);
+//       print_rbtree(tree);
 
-  //    // 삭제 테스트
-  //    node_t* del_node = rbtree_find(tree, 20);
-  //    if (del_node) 
-  //    {
-  //        rbtree_erase(tree, del_node);
-  //        print_rbtree(tree);
-  //    }
+//       // 삭제 테스트
+//       node_t* del_node = rbtree_find(tree, 20);
+//       if (del_node) 
+//       {
+//           rbtree_erase(tree, del_node);
+//           print_rbtree(tree);
+//       }
 
-  //    del_node = rbtree_find(tree, 10);
-  //    if (del_node) 
-  //    {
-  //        rbtree_erase(tree, del_node);
-  //        print_rbtree(tree);
-  //    }
+//       del_node = rbtree_find(tree, 10);
+//       if (del_node) 
+//       {
+//           rbtree_erase(tree, del_node);
+//           print_rbtree(tree);
+//       }
 
-  //    // 마무리
-  //    delete_rbtree(tree);
+//       // 마무리
+//       delete_rbtree(tree);
 
-  //    return 0;
-  //}
+//       return 0;
+//   }
