@@ -1,3 +1,7 @@
+// #ifdef SENTINEL
+// #error "SENTINEL is defined!"
+// #endif
+
 #include "rbtree.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -13,9 +17,11 @@ rbtree* new_rbtree(void)
     rbtree* tree = (rbtree*)calloc(1, sizeof(rbtree));
     node_t* nil = (node_t*)calloc(1, sizeof(node_t));
     nil->color = RBTREE_BLACK;
-    nil->left = NULL;
-    nil->right = NULL;
-    nil->parent = NULL;
+ 
+    nil->left = nil;
+    nil->right = nil;
+    nil->parent = nil;
+
     tree->nil = nil;
     tree->root = tree->nil;
     return tree;
@@ -333,7 +339,7 @@ node_t* rbtree_min(const rbtree* tree)
     if (!tree) return NULL;
     node_t* now = tree->root;
 
-    if (now == tree->nil) return NULL;
+    if (now == tree->nil) return tree->nil;
 
     while (now->left != tree->nil)
     {
@@ -352,7 +358,7 @@ node_t* rbtree_max(const rbtree* tree)
     if (!tree) return NULL;
     node_t* now = tree->root;
 
-    if (now == tree->nil) return NULL;
+    if (now == tree->nil) return tree->nil;
 
     while (now->right != tree->nil)
     {
