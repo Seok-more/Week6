@@ -561,11 +561,10 @@ static void erase_fixup(rbtree* tree, node_t* x)
     x->color = RBTREE_BLACK;
 }
 
-
 /*
  * 1. 삭제 대상 노드(node)가 자식이 0개 또는 1개면 node가 직접 삭제됨.
- *    -> 자식이 2개면 석세서(y)를 찾아 node의 key값만 교체하고 y를 삭제.
- * 2. 삭제를 위해 y의 자식(x)와 부모 연결을 갱신.
+ *    -> 자식이 2개면 석세서를 찾아 node의 key값만 교체하고 node_erase를 삭제.
+ * 2. 삭제를 위해 node_erase의 자식(x)와 부모 연결을 갱신.
  * 3. 실제 삭제는 항상 자식이 0개 또는 1개인 노드(y)에서 발생
  */
 int rbtree_erase(rbtree* tree, node_t* node)
@@ -573,60 +572,60 @@ int rbtree_erase(rbtree* tree, node_t* node)
     if (!tree || node == tree->nil) return 0;
 
     // y: 실제로 삭제될 노드
-    node_t* y = (node->left == tree->nil || node->right == tree->nil) ? node : tree_successor(tree, node);
+    node_t* node_erase = (node->left == tree->nil || node->right == tree->nil) ? node : tree_successor(tree, node);
 
-    // x: y의 자식
-    node_t* x = (y->left != tree->nil) ? y->left : y->right;
+    // x: node_erase의 자식, node_erase를 대체할 녀석
+    // 위에서 걸러질테니 x는 0 or 1개만 있을 수 있음
+    node_t* x = (node_erase->left != tree->nil) ? node_erase->left : node_erase->right;
 
     // x의 부모를 y의 부모로 연결
-    x->parent = y->parent;
+    x->parent = node_erase->parent;
 
     // 트리의 root가 삭제되는 경우 root를 x로 교체
-    if (y->parent == tree->nil)
+    if (node_erase->parent == tree->nil)
     {
         tree->root = x;
     }
-    else if (y == y->parent->left)
+    else if (node_erase == node_erase->parent->left)
     {
-        y->parent->left = x;
+        node_erase->parent->left = x;
     }
     else
     {
-        y->parent->right = x;
+        node_erase->parent->right = x;
     }
 
-    // 삭제 대상이 석세서(y)라면 node의 key값만 y의 key로 복사
-    if (y != node)
+    // 삭제 대상이 석세서(node_erase)라면 node의 key값만 node_erase의 key로 복사
+    if (node_erase != node)
     {
-        node->key = y->key;
+        node->key = node_erase->key;
     }
 
     // 삭제된 노드가 BLACK면 재조정
-    if (y->color == RBTREE_BLACK)
+    if (node_erase->color == RBTREE_BLACK)
     {
         erase_fixup(tree, x);
     }
 
-    free(y);
+    free(node_erase);
     return 0;
 }
 
 /*
- * 트리를 오름차순으로 배열에 저장(중위순회)
- * n_size를 넘지 않는 범위에서 값을 복사
+ * 중위순회를 하면 오름차순 배열로 변하니까
  */
-static void to_array_rec(const rbtree* tree, node_t* node, key_t* arr, size_t* i, size_t n_size)
+static void to_array_inorder(const rbtree* tree, node_t* node, key_t* arr, size_t* i, size_t n_size)
 {
     if (node == tree->nil) return;
 
-    to_array_rec(tree, node->left, arr, i, n_size);
+    to_array_inorder(tree, node->left, arr, i, n_size);
 
     if (*i < n_size)
     {
         arr[(*i)++] = node->key;
     }
 
-    to_array_rec(tree, node->right, arr, i, n_size);
+    to_array_inorder(tree, node->right, arr, i, n_size);
 }
 
 /*
@@ -635,8 +634,8 @@ static void to_array_rec(const rbtree* tree, node_t* node, key_t* arr, size_t* i
 int rbtree_to_array(const rbtree* tree, key_t* arr, const size_t n)
 {
     size_t i = 0;
-    to_array_rec(tree, tree->root, arr, &i, n);
-    return 0;
+    to_array_inorder(tree, tree->root, arr, &i, n);
+    return (int)i;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -656,6 +655,14 @@ void print_rbtree(const rbtree* tree) {
     printf("\n[RBTree]\n");
     print_rbtree_rec(tree, tree->root, 0, '|');
 }
+
+void print_array(const key_t* arr, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        printf("%d ", arr[i]);
+    }
+    printf("\n");
+}
+
 
 //   int main(void)
 //   {
@@ -688,6 +695,12 @@ void print_rbtree(const rbtree* tree) {
 //           rbtree_erase(tree, del_node);
 //           print_rbtree(tree);
 //       }
+
+//       // 배열 테스트
+//       key_t arr[100];
+//       int array = rbtree_to_array(tree, arr, 100);
+//       printf("\n arr: ");
+//       print_array(arr, array);
 
 //       // 마무리
 //       delete_rbtree(tree);
