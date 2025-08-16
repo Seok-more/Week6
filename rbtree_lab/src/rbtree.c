@@ -397,7 +397,7 @@ static node_t* tree_successor(const rbtree* tree, node_t* node)
 
 /*
  * 삭제 후 트리 규칙 복구
- * Case 1) 삭제할 노드가 red : 걍 삭제함
+ * Case 1) 삭제할 노드가 red : 걍 삭제함(erase_fixup을 적용안함)
  * Case 2) Root가 DB : 추가 black 삭제
  * Case 3) DB의 형제가 red : s=black, p=red (s와 p 색상교환) + DB방향으로 Rotate(p) => 다른 Case로 전환
  * Case 4) DB의 형제가 black && 형제의 양쪽 자식 모두 black : DB를 parent에게 이전, (p = !p_color), s=red => 아직 DB가 있다면 p를 대상으로 알고리즘 실행
@@ -406,6 +406,8 @@ static node_t* tree_successor(const rbtree* tree, node_t* node)
  */
 static void erase_fixup(rbtree* tree, node_t* x)
 {
+	  // 삭제할 노드 x는 DB상태이다
+ 
     // Case 2) 루트가 DB면, 루프 조건에서 바로 종료되어 x->color만 black으로 변경됨
 
     while (x != tree->root && x->color == RBTREE_BLACK)
@@ -447,9 +449,10 @@ static void erase_fixup(rbtree* tree, node_t* x)
                 s->color = RBTREE_RED;
                 x = x->parent;
             }
+ 
+            // Case 5) s=black, sr=black, sl=red면 색상 교환 후 s 기준으로 우회전 -> Case 6로
             else 
             {
-                // Case 5) s=black, sr=black, sl=red면 색상 교환 후 s 기준으로 우회전 -> Case 6로
                 if (s->right->color == RBTREE_BLACK)
                 { 
                     //             [p]
@@ -467,7 +470,7 @@ static void erase_fixup(rbtree* tree, node_t* x)
                     s = x->parent->right; // *바뀐 형제 갱신
                 }
                
-                // Case 6) s=black, sr=red면 p 기준으로 좌회전, DB 제거
+                // Case 6) s=black, sr=red면, s와p 색깔 교환, p 기준으로 좌회전, DB 제거
                 
                 //            [p]
                 //     [x(DB)]    [s(B)]
@@ -484,7 +487,7 @@ static void erase_fixup(rbtree* tree, node_t* x)
                 x = tree->root; // DB 루트로 보내서 제거
             }
         }
-        else // 오른쪽 자식일때,
+        else // 오른쪽 자식일때(위에꺼 대칭)
         {
             node_t* s = x->parent->left;
 
@@ -571,14 +574,14 @@ int rbtree_erase(rbtree* tree, node_t* node)
 {
     if (!tree || node == tree->nil) return 0;
 
-    // y: 실제로 삭제될 노드
+    // node_erase: 실제로 삭제될 노드
     node_t* node_erase = (node->left == tree->nil || node->right == tree->nil) ? node : tree_successor(tree, node);
 
     // x: node_erase의 자식, node_erase를 대체할 녀석
     // 위에서 걸러질테니 x는 0 or 1개만 있을 수 있음
     node_t* x = (node_erase->left != tree->nil) ? node_erase->left : node_erase->right;
 
-    // x의 부모를 y의 부모로 연결
+    // x의 부모를 node_erase의 부모로 연결
     x->parent = node_erase->parent;
 
     // 트리의 root가 삭제되는 경우 root를 x로 교체
@@ -622,6 +625,7 @@ static void to_array_inorder(const rbtree* tree, node_t* node, key_t* arr, size_
 
     if (*i < n_size)
     {
+        // 여기서 arr[*i++]로 해버린 실수
         arr[(*i)++] = node->key;
     }
 
@@ -664,46 +668,158 @@ void print_array(const key_t* arr, size_t n) {
 }
 
 
-//   int main(void)
-//   {
-//       rbtree* tree = new_rbtree();
+// int main(void)
+// {
+//     // 트리 생성 체크
+//     rbtree* tree = new_rbtree();
+//     print_rbtree(tree);
 
-//       // 삽입 테스트
-//       rbtree_insert(tree, 30);
-//       print_rbtree(tree);
+//     // insert 체크
+//     rbtree_insert(tree, 30);
+//     print_rbtree(tree);
 
-//       rbtree_insert(tree, 10);
-//       print_rbtree(tree);
+//     rbtree_insert(tree, 10);
+//     print_rbtree(tree);
 
-//       rbtree_insert(tree, 20);
-//       print_rbtree(tree);
+//     rbtree_insert(tree, 20);
+//     print_rbtree(tree);
 
-//       rbtree_insert(tree, 25);
-//       print_rbtree(tree);
+//     rbtree_insert(tree, 25);
+//     print_rbtree(tree);
 
-//       // 삭제 테스트
-//       node_t* del_node = rbtree_find(tree, 20);
-//       if (del_node) 
-//       {
-//           rbtree_erase(tree, del_node);
-//           print_rbtree(tree);
-//       }
+//     printf("\n");
 
-//       del_node = rbtree_find(tree, 10);
-//       if (del_node) 
-//       {
-//           rbtree_erase(tree, del_node);
-//           print_rbtree(tree);
-//       }
+//     // find 체크
+//     node_t* find = rbtree_find(tree, 20);
+//     if (find != tree->nil)
+//     {
+//         printf("find: ");
+//         printf("%d\n", find->key);
+//     }
+//     else {
+//         printf("not found\n");
+//     }
 
-//       // 배열 테스트
-//       key_t arr[100];
-//       int array = rbtree_to_array(tree, arr, 100);
-//       printf("\n arr: ");
-//       print_array(arr, array);
+//     // min 체크
+//     node_t* min_ = rbtree_min(tree);
+//     printf("min: ");
+//     printf("%d\n", min_->key);
 
-//       // 마무리
-//       delete_rbtree(tree);
+//     // max 체크
+//     node_t* max_ = rbtree_max(tree);
+//     printf("max: ");
+//     printf("%d\n", max_->key);
 
-//       return 0;
-//   }
+//     // 다음 노드 체크
+//     node_t* next = tree_successor(tree, find);
+//     printf("next of %d: ", find->key);
+//     printf("%d\n", next->key);
+
+//     // 배열 테스트
+//     key_t arr[100];
+//     int array = rbtree_to_array(tree, arr, 100);
+//     printf("\n arr: ");
+//     print_array(arr, array);
+
+//     // 삭제 테스트
+//     node_t* del_node = rbtree_find(tree, 20);
+//     if (del_node)
+//     {
+//         rbtree_erase(tree, del_node);
+//         print_rbtree(tree);
+//     }
+//     del_node = rbtree_find(tree, 10);
+//     if (del_node)
+//     {
+//         rbtree_erase(tree, del_node);
+//         print_rbtree(tree);
+//     }
+
+//     // 트리 삭제 체크
+//     delete_rbtree(tree);
+//     print_rbtree(tree);
+//     return 0;
+// }
+
+// 1. test_init
+// 목적 : 레드블랙트리의 초기화가 올바른지 확인.
+// 동작 :
+// 트리를 새로 만들고
+// 트리 자체 / 루트 / 센티넬(nil) 노드가 제대로 초기화되었는지 체크
+// 트리 삭제
+// 
+// 2. test_insert_single
+// 목적 : 단일 노드 삽입이 올바르게 동작하는지 확인.
+// 동작 :
+// 트리에 하나의 key를 삽입
+// 루트가 해당 노드인지, 값 / 포인터 / 색깔이 정상인지 체크
+// 트리 삭제
+// 
+// 3. test_find_single
+// 목적 : 트리에서 key를 찾는 기능이 제대로 동작하는지 확인.
+// 동작 :
+// 하나의 key를 삽입
+// 올바른 key로 찾으면 해당 노드가 반환되는지
+// 없는 key로 찾으면 NULL 반환되는지 체크
+// 트리 삭제
+// 
+// 4. test_erase_root
+// 목적 : 루트 노드 삭제가 제대로 이루어지는지 확인.
+// 동작 :
+// 하나의 key를 삽입
+// 루트 노드를 삭제
+// 삭제 후 트리 루트가 nil 또는 NULL인지 체크
+// 트리 삭제
+// 
+// 5. test_find_erase_fixed
+// 목적 : 여러 값에 대해 삽입 / 검색 / 삭제가 반복적으로 정상 동작하는지 확인.
+// 동작 :
+// 고정된 배열의 key들을 모두 트리에 삽입
+// 각 키를 찾아서 삭제, 삭제 후 다시 찾아서 없는지 확인
+// 다시 삽입 / 검색 / 삭제를 반복
+// 트리 삭제
+// 
+// 6. test_minmax_suite
+// 목적 : 트리의 최소값 / 최대값 반환 및 삭제 후 동작이 올바른지 확인.
+// 동작 :
+// 여러 값을 삽입 후,
+// 트리에서 최소 / 최대값을 찾아 반환값이 올바른지 체크
+// 삭제 후에도 min / max가 제대로 갱신되는지 확인
+// 트리 삭제
+// 
+// 7. test_to_array_suite
+// 목적 : 트리의 중위순회 결과가 오름차순 정렬 배열과 같은지 확인.
+// 동작 :
+// 여러 값을 트리에 삽입
+// 트리를 배열로 변환
+// 배열과 오름차순 정렬된 원본 배열을 비교
+// 트리 삭제
+// 
+// 8. test_distinct_values
+// 목적 : 중복 없는(모두 다른) 값을 잘 관리하는지, 트리 속성과 색상 규칙을 지키는지 확인.
+// 동작 :
+// 여러 서로 다른 값을 삽입
+// 트리의 레드블랙트리 속성(색상 / 검색 규칙 등) 검증
+// 트리 삭제
+// 
+// 9. test_duplicate_values
+// 목적 : 중복된 값들이 삽입될 때도 레드블랙트리 규칙이 유지되는지 확인.
+// 동작 :
+// 중복값이 포함된 배열을 삽입
+// 트리의 색상 / 검색 규칙 등 레드블랙트리 속성 검증
+// 트리 삭제
+// 
+// 10. test_multi_instance
+// 목적 : 여러 레드블랙트리를 동시에 관리할 때 각각의 트리가 독립적으로 잘 동작하는지 확인.
+// 동작 :
+// 두 개의 트리를 생성
+// 각각에 배열을 삽입 / 정렬 / 배열 변환
+// 각 트리의 결과가 독립적으로 올바른지 확인
+// 트리 삭제
+// 
+// 11. test_find_erase_rand
+// 목적 : 대량의 랜덤 값에 대해 삽입 / 검색 / 삭제가 반복적으로 정상 동작하는지 검증(스트레스 테스트).
+// 동작 :
+// 랜덤 시드로 큰 배열을 생성, 삽입 / 검색 / 삭제 반복
+// 모든 값이 올바르게 삽입 / 삭제 / 검색되는지 확인
+// 트리 삭제
