@@ -584,7 +584,6 @@ int rbtree_erase(rbtree* tree, node_t* node)
     node_t* node_erase = (node->left == tree->nil || node->right == tree->nil) ? node : tree_successor(tree, node);
 
     // x: node_erase의 자식, node_erase를 대체할 녀석
-    // 위에서 걸러질테니 x는 0 or 1개만 있을 수 있음
     node_t* x = (node_erase->left != tree->nil) ? node_erase->left : node_erase->right;
 
     // x의 부모를 node_erase의 부모로 연결
