@@ -478,7 +478,7 @@ static void erase_fixup(rbtree* tree, node_t* x)
                
                 // Case 6) s=black, sr=red면, s와p 색깔 교환, p 기준으로 좌회전, DB 제거
                 
-                //            [p]
+                //            [p(R)]
                 //     [x(DB)]    [s(B)]
                 //                     [sr(R)]
                 //
